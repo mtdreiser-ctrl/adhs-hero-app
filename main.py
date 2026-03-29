@@ -1,11 +1,11 @@
 import streamlit as st
 import random
 import time
+import base64
 
-# --- SEITEN-KONFIGURATION ---
-st.set_page_config(page_title="ADHS Hero-System", layout="centered")
+st.set_page_config(page_title="ADHS Pro-Pilot", layout="centered")
 
-# --- AUDIO FUNKTION (Web-Standard) ---
+# --- AUDIO FUNKTION (Vibe-Check) ---
 def play_sound(url):
     sound_html = f"""
         <audio autoplay>
@@ -14,104 +14,83 @@ def play_sound(url):
     """
     st.markdown(sound_html, unsafe_allow_html=True)
 
-# Sound-URLs
+# Sound-URLs (Public Assets)
 START_SOUND = "https://www.soundjay.com/buttons/sounds/button-3.mp3"
 WIN_SOUND = "https://www.soundjay.com/human/sounds/applause-01.mp3"
 
-# --- DESIGN (CSS) ---
+# --- CSS & DESIGN ---
 st.markdown("""
 <style>
     .main { background-color: #0E1117; color: #FFFFFF; }
-    .stButton>button { 
-        height: 80px; width: 100%; border-radius: 20px; 
-        font-weight: bold; font-size: 22px !important;
-        background: linear-gradient(45deg, #FF4B4B, #FF914D);
-        color: white; border: none;
-    }
-    .task-card { 
-        background-color: #1E1E1E; padding: 25px; border-radius: 20px; 
-        border: 2px solid #FF4B4B; text-align: center; margin: 20px 0;
-    }
-    .pause-box { 
-        background-color: #1E1E1E; padding: 25px; border-radius: 20px; 
-        border: 2px solid #00D1FF; text-align: center; margin: 20px 0;
-    }
+    .stButton>button { height: 70px; border-radius: 15px; font-weight: bold; font-size: 20px !important; }
+    .pause-box { background-color: #262730; padding: 20px; border-radius: 15px; border: 2px solid #00D1FF; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- INITIALISIERUNG (SYSTEM-START) ---
-if 'mode' not in st.session_state:
-    st.session_state.mode = "READY"
-if 'current_task' not in st.session_state:
-    st.session_state.current_task = ""
-if 'start_time' not in st.session_state:
-    st.session_state.start_time = 0
+# --- STATE MANAGEMENT ---
+if 'mode' not in st.session_state: st.session_state.mode = "READY"
+if 'start_time' not in st.session_state: st.session_state.start_time = 0
 
-# Aufgaben-Datenbank
 tasks = {
-    "High Energy": ["🧺 Wäsche machen", "🧹 Saugen", "🗑️ Müll rausbringen", "🍳 Küche aufräumen", "🧼 Bad putzen"],
-    "Low Battery": ["🧦 Socken sortieren", "📧 Mails löschen", "📝 Einkaufsliste schreiben", "📁 Post sortieren", "📱 Fotos aussortieren"]
+    "High Energy": ["Wäsche", "Saugen", "Müll", "Küche", "Bad"],
+    "Low Battery": ["Socken sortieren", "Mails löschen", "Post", "Fotos", "Planen"]
 }
 
 st.title("⚡ ADHS Hero-System")
 
-# --- MODUS: BEREIT (READY) ---
+# --- LOGIK: READY MODE ---
 if st.session_state.mode == "READY":
-    st.write("Wähle dein Energielevel für die nächste Mission:")
-    low_battery = st.toggle("Low Battery Mode 🪫 (Sitzen/Ruhig)")
-    
-    if st.button("🚀 NÄCHSTE MISSION STARTEN"):
+    low_battery = st.toggle("Low Battery Mode 🪫")
+    if st.button("🚀 MISSION STARTEN"):
         pool = tasks["Low Battery"] if low_battery else tasks["High Energy"]
         st.session_state.current_task = random.choice(pool)
-        st.session_state.start_time = time.time()
         st.session_state.mode = "WORKING"
+        st.session_state.start_time = time.time()
         play_sound(START_SOUND)
         st.rerun()
 
-# --- MODUS: ARBEIT (WORKING) ---
+# --- LOGIK: WORKING MODE (15-20 Min) ---
 elif st.session_state.mode == "WORKING":
-    st.markdown(f"""
-    <div class="task-card">
-        <p style="color: #888;">DEINE MISSION:</p>
-        <h2>{st.session_state.current_task}</h2>
-    </div>
-    """, unsafe_allow_html=True)
+    st.info(f"AKTUELLE MISSION: {st.session_state.current_task}")
     
     elapsed = time.time() - st.session_state.start_time
-    duration = 15 * 60 # 15 Minuten
-    remaining = max(0, duration - elapsed)
+    remaining = max(0, 15 * 60 - elapsed)
     
-    st.progress(min(1.0, elapsed / duration))
-    st.write(f"⏱️ Fokus-Timer: {int(remaining//60):02d}:{int(remaining%60):02d}")
+    st.progress(min(1.0, elapsed / (15 * 60)))
+    
+    timer_placeholder = st.empty()
+    timer_placeholder.write(f"⏱️ Noch {int(remaining//60):02d}:{int(remaining%60):02d}")
 
-    if st.button("✅ ICH BIN FERTIG!") or remaining <= 0:
+    if remaining <= 0:
         play_sound(WIN_SOUND)
         st.balloons()
         st.session_state.mode = "PAUSE"
-        st.session_state.start_time = time.time() # Reset für Pause-Timer
+        st.session_state.start_time = time.time()
+        st.rerun()
+    else:
+        if st.button("✅ ERLEDIGT!"):
+            play_sound(WIN_SOUND)
+            st.balloons()
+            st.session_state.mode = "PAUSE"
+            st.session_state.start_time = time.time()
+            st.rerun()
+        time.sleep(1)
         st.rerun()
 
-# --- MODUS: PAUSE (PAUSE) ---
+# --- LOGIK: PAUSE MODE (10 Min) ---
 elif st.session_state.mode == "PAUSE":
-    st.markdown("""
-    <div class="pause-box">
-        <h2 style="color: #00D1FF;">⏸️ PAUSEN-MODUS</h2>
-        <p>Gönn deinem Kopf 10 Minuten Ruhe. Trink ein Glas Wasser!</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="pause-box"><h2>⏸️ PAUSEN-MODUS</h2><p>Zeit zum Regenerieren. Keine neue Aufgabe möglich!</p></div>', unsafe_allow_html=True)
     
     elapsed = time.time() - st.session_state.start_time
-    pause_duration = 10 * 60 # 10 Minuten
-    remaining_pause = max(0, pause_duration - elapsed)
+    remaining_pause = max(0, 10 * 60 - elapsed)
     
-    st.warning(f"Pause läuft: Noch {int(remaining_pause//60):02d}:{int(remaining_pause%60):02d} Minuten.")
+    timer_placeholder = st.empty()
+    timer_placeholder.warning(f"Noch {int(remaining_pause//60):02d}:{int(remaining_pause%60):02d} Minuten ausruhen.")
     
     if remaining_pause <= 0:
         if st.button("🔄 Wieder einsatzbereit?"):
             st.session_state.mode = "READY"
             st.rerun()
     else:
-        # Kleiner Button zum Pausen-Überspringen (nur für Notfälle)
-        if st.button("⏩ Pause abkürzen"):
-            st.session_state.mode = "READY"
-            st.rerun()
+        time.sleep(1)
+        st.rerun()
