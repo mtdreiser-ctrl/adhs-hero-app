@@ -2,92 +2,115 @@ import streamlit as st
 import random
 import time
 
-# --- SEITEN-SETUP ---
 st.set_page_config(page_title="ADHS Hero-System", layout="centered")
 
-# --- SOUND-ENGINE (Triggert immer) ---
+# --- SOUND ---
 def play_audio(url):
-    st.components.v1.html(
-        f"""<audio autoplay><source src="{url}" type="audio/mpeg"></audio>""",
-        height=0,
-    )
+    st.audio(url, autoplay=True)
 
 START_SOUND = "https://www.soundjay.com/buttons/sounds/button-3.mp3"
 END_SOUND = "https://www.soundjay.com/human/sounds/applause-01.mp3"
 
-# --- SYSTEM-SPEICHER ---
-if 'mode' not in st.session_state: st.session_state.mode = "READY"
-if 'tasks' not in st.session_state: 
-    st.session_state.tasks = ["🧺 Wäsche", "🧹 Saugen", "🗑️ Müll", "🍳 Küche", "🧼 Bad"]
-if 'start_time' not in st.session_state: st.session_state.start_time = 0
+# --- SESSION STATE INIT ---
+if 'mode' not in st.session_state:
+    st.session_state.mode = "READY"
 
+if 'tasks' not in st.session_state:
+    st.session_state.tasks = ["🧺 Wäsche", "🧹 Saugen", "🗑️ Müll", "🍳 Küche", "🧼 Bad"]
+
+if 'start_time' not in st.session_state:
+    st.session_state.start_time = 0
+
+if 'current_task' not in st.session_state:
+    st.session_state.current_task = ""
+
+# --- UI ---
 st.title("⚡ ADHS Hero-System")
 
-# --- AUFGABEN-VERWALTUNG (Löschen & Hinzufügen) ---
+# --- AUFGABEN ---
 with st.expander("📋 Aufgaben-Pool bearbeiten"):
-    # Neue Aufgabe hinzufügen
     c1, c2 = st.columns([3, 1])
-    with c1:
-        new_t = st.text_input("Neue Mission eingeben:", key="input_new")
-    with c2:
-        if st.button("Hinzufügen") and new_t:
-            st.session_state.tasks.append(new_t)
-            st.rerun()
     
+    with c1:
+        new_task = st.text_input("Neue Mission:", key="input_new")
+    
+    with c2:
+        if st.button("Hinzufügen") and new_task:
+            st.session_state.tasks.append(new_task)
+            st.rerun()
+
     st.write("---")
-    # Liste der aktuellen Aufgaben mit Lösch-Option
-    for i, t in enumerate(st.session_state.tasks):
+
+    for i, task in enumerate(st.session_state.tasks):
         cols = st.columns([4, 1])
-        cols[0].write(f"• {t}")
+        cols[0].write(f"• {task}")
         if cols[1].button("🗑️", key=f"del_{i}"):
             st.session_state.tasks.pop(i)
             st.rerun()
 
-# --- LOGIK: BEREIT ---
+# --- TIMER FUNKTION ---
+def get_remaining(start, duration_sec):
+    elapsed = time.time() - start
+    return max(0, duration_sec - elapsed)
+
+def format_time(sec):
+    return f"{int(sec//60):02d}:{int(sec%60):02d}"
+
+# --- MODES ---
+
+# READY
 if st.session_state.mode == "READY":
-    st.write(f"Aktuell {len(st.session_state.tasks)} Aufgaben im Pool.")
     if st.button("🚀 MISSION STARTEN"):
-        if len(st.session_state.tasks) > 0:
+        if st.session_state.tasks:
             st.session_state.current_task = random.choice(st.session_state.tasks)
-            st.session_state.mode = "WORKING"
             st.session_state.start_time = time.time()
+            st.session_state.mode = "WORKING"
             play_audio(START_SOUND)
             st.rerun()
         else:
-            st.error("Bitte zuerst eine Aufgabe hinzufügen!")
+            st.error("Pool ist leer!")
 
-# --- LOGIK: ARBEIT (15 Min) ---
+# WORKING
 elif st.session_state.mode == "WORKING":
-    st.info(f"AKTUELLE MISSION: {st.session_state.current_task}")
-    
-    elapsed = time.time() - st.session_state.start_time
-    rem = max(0, 15 * 60 - elapsed)
-    
-    st.progress(min(1.0, elapsed / (15 * 60)))
-    st.write(f"⏱️ Fokus: {int(rem//60):02d}:{int(rem%60):02d}")
+    st.info(f"MISSION: {st.session_state.current_task}")
 
-    if st.button("✅ ERLEDIGT!") or rem <= 0:
+    remaining = get_remaining(st.session_state.start_time, 15 * 60)
+
+    st.metric("⏱️ Fokuszeit", format_time(remaining))
+
+    progress = 1 - (remaining / (15 * 60))
+    st.progress(progress)
+
+    if st.button("✅ FERTIG!") or remaining <= 0:
         play_audio(END_SOUND)
         st.balloons()
         st.session_state.mode = "PAUSE"
         st.session_state.start_time = time.time()
         st.rerun()
-    
-    time.sleep(1)
-    st.rerun()
 
-# --- LOGIK: PAUSE (10 Min) ---
+    # sanfter Auto-Refresh
+    st.markdown(
+        "<meta http-equiv='refresh' content='1'>",
+        unsafe_allow_html=True
+    )
+
+# PAUSE
 elif st.session_state.mode == "PAUSE":
-    st.warning("⏸️ PAUSEN-MODUS")
-    
-    elapsed = time.time() - st.session_state.start_time
-    rem_p = max(0, 10 * 60 - elapsed)
-    st.write(f"⏱️ Pause: {int(rem_p//60):02d}:{int(rem_p%60):02d}")
-    
-    if rem_p <= 0 or st.button("🔄 Nächste Runde?"):
-        play_audio(START_SOUND) # Sound auch bei neuem Start nach Pause
+    st.warning("⏸️ PAUSE")
+
+    remaining = get_remaining(st.session_state.start_time, 10 * 60)
+
+    st.metric("⏱️ Rest", format_time(remaining))
+
+    progress = 1 - (remaining / (10 * 60))
+    st.progress(progress)
+
+    if remaining <= 0 or st.button("🔄 Nächste Runde"):
+        play_audio(START_SOUND)
         st.session_state.mode = "READY"
         st.rerun()
-    
-    time.sleep(1)
-    st.rerun()
+
+    st.markdown(
+        "<meta http-equiv='refresh' content='1'>",
+        unsafe_allow_html=True
+    )
